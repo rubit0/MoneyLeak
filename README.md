@@ -48,6 +48,18 @@ This is equivalent to each process paying for its share of a synthetic full-syst
 
 In **Settings** (⌘,), users can optionally enable **custom cost per MB** to override the default rate — for example, to reflect what they actually paid for a RAM upgrade.
 
+## How memory is counted
+
+Money Leak Monitor is built for **cost per app**, not for matching Activity Monitor’s system-wide memory bar. The numbers answer different questions.
+
+**Per app:** Each running process is read with `proc_pidinfo` using **resident memory** (`pti_resident_size`). Helpers inside the same `.app` bundle (Chrome renderers, Xcode SourceKit, etc.) are merged into one row, and their memory and cost are summed. Click the process-count badge on a grouped row to see the breakdown.
+
+**RAM In Use:** The summary total is the sum of those per-app (and standalone daemon) resident sizes. It is *not* the same as Activity Monitor’s **Memory Used**, which comes from the kernel and includes wired memory, compression, and other system categories that are never attributed to a single app row.
+
+**Unused RAM value:** `total physical RAM − RAM In Use`. This is a budgeting shortcut for the opportunity-cost model (“what’s left of your synthetic RAM bill”), not a measure of free or reclaimable memory. macOS file cache, wired kernel memory, and processes Money Leak cannot read all land in this bucket, so **Unused RAM value is often much larger than Activity Monitor’s free memory**.
+
+**Why resident memory:** It is a stable, per-process public API suited to ranking apps by cost. Activity Monitor’s **Memory** column uses **footprint**, which is better for system pressure but harder to attribute fairly per PID. Money Leak prioritizes comparable app-to-app cost over matching the Memory Used footer in Activity Monitor.
+
 ## Features
 
 | Feature | Description |
@@ -100,8 +112,7 @@ Process enumeration uses public macOS APIs only:
 
 ## Notes
 
-- **Grouped rows** show one entry per app bundle; standalone daemons/CLIs remain separate.
-- **Unused RAM value** is derived from total physical RAM minus summed process resident memory.
+- **Grouped rows** show one entry per app bundle; standalone daemons/CLIs remain separate. See [How memory is counted](#how-memory-is-counted) for why totals differ from Activity Monitor.
 - `ContentView.swift` exists for Xcode canvas previews; the app launches from `MoneyLeakApp`.
 
 ## License
