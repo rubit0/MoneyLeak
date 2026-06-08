@@ -66,32 +66,41 @@ Money Leak Monitor is built for **cost per app**, not for matching Activity Moni
 |--------|-------------|
 | Process table | Sortable columns: icon, name, memory, cost, % RAM |
 | Bundle grouping | Helpers under the same `.app` are merged into one row |
+| Process detail | Click the process-count badge on a grouped row for a per-PID breakdown (list + donut chart) |
 | Summary dashboard | System RAM value, RAM in use, unused RAM value |
 | Top 5 panel | List + interactive donut chart with hover linking |
-| Search | Filter processes by name |
+| Search | Filter processes by display name (bundle basename, e.g. `logioptionsplus_agent`) |
 | CSV export | Save panel lets you choose export location |
+| Receipt export | Toolbar button saves a thermal-receipt PNG of the top 5 via `NSSavePanel` |
 | Cost alerts | Optional notifications when a process exceeds a threshold |
 | Menu bar extra | Shows total RAM cost and top processes |
+| About | App menu **About Money Leak Monitor** or Settings → About — version, credits, random tagline |
 
 ## Project structure
 
 ```
 MoneyLeak/
 ├── App/
-│   └── MoneyLeakApp.swift          # @main entry, menu bar, settings command
+│   └── MoneyLeakApp.swift          # @main entry, menu bar, About command
 ├── Models/
 │   ├── ProcessMemoryInfo.swift     # Process row model
+│   ├── ProcessMemberInfo.swift     # Per-PID member for grouped rows
 │   ├── MemoryCostSettings.swift    # UserDefaults-backed preferences
-│   └── RAMOpportunityCostModel.swift
+│   ├── RAMOpportunityCostModel.swift
+│   └── AppAboutInfo.swift          # Version, credits, taglines
 ├── Services/
-│   └── ProcessMemoryService.swift  # libproc / sysctl process enumeration
+│   ├── ProcessMemoryService.swift  # libproc / sysctl process enumeration
+│   └── TopFiveReceiptRenderer.swift
 ├── ViewModels/
 │   └── ProcessListViewModel.swift
 ├── Views/
-│   ├── ProcessListView.swift
+│   ├── ProcessListView.swift       # Toolbar: CSV, receipt, settings
 │   ├── ProcessTableView.swift
+│   ├── ProcessDetailSheetView.swift
 │   ├── MemoryCostSummaryView.swift
+│   ├── TopFiveReceiptView.swift
 │   ├── SettingsView.swift
+│   ├── AboutView.swift
 │   └── …
 └── ContentView.swift               # SwiftUI preview host only
 ```
@@ -100,7 +109,9 @@ MoneyLeak/
 
 Process enumeration uses public macOS APIs only:
 
-- `proc_listallpids`, `proc_pidinfo`, `proc_pidpath` (process names from executable path basename)
+- `sysctl(KERN_PROC_ALL)` for the full PID list — **do not use `proc_listallpids`**, which omits many long-lived background processes (e.g. Logi Options+)
+- `proc_pidinfo` → `pti_resident_size` for per-process resident memory
+- `proc_pidpath` for executable path; row display name is the `.app` bundle basename (not `CFBundleDisplayName` or `proc_name`)
 - `sysctl` (`HW_MEMSIZE`) for total RAM
 - `host_statistics64` is not used in the current version
 
@@ -113,6 +124,8 @@ Process enumeration uses public macOS APIs only:
 ## Notes
 
 - **Grouped rows** show one entry per app bundle; standalone daemons/CLIs remain separate. See [How memory is counted](#how-memory-is-counted) for why totals differ from Activity Monitor.
+- **Display names** come from the bundle folder name (`Google Chrome.app` → `Google Chrome`). Some apps use a different marketing name in Activity Monitor (e.g. Logi Options+ appears as `logioptionsplus_agent`).
+- Processes with unreadable memory (`proc_pidinfo` failure, often root-owned helpers) are omitted from rows and totals.
 - `ContentView.swift` exists for Xcode canvas previews; the app launches from `MoneyLeakApp`.
 
 ## License

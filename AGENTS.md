@@ -42,7 +42,7 @@ App → Views → ViewModels → Services → Models
 
 1. `ProcessListViewModel.startRefreshing()` runs a loop: `refresh()` → sleep(`settings.refreshInterval`).
 2. `refresh()` calls `ProcessMemoryService.fetchProcesses(customCostPerMB:)` on a detached task.
-3. Service enumerates PIDs, reads resident memory, groups by `.app` bundle path, populates `ProcessMemoryInfo.members`, applies `RAMOpportunityCostModel`.
+3. Service enumerates PIDs via `sysctl(KERN_PROC_ALL)` (not `proc_listallpids`, which omits many long-lived processes), reads resident memory, groups by `.app` bundle path, populates `ProcessMemoryInfo.members`, applies `RAMOpportunityCostModel`.
 4. ViewModel publishes `processes`; `totalOccupiedBytes` is the sum of row resident memory. Views observe via `@Observable` / `@Bindable`.
 
 ### Pricing rules (do not break without explicit request)
@@ -58,10 +58,17 @@ App → Views → ViewModels → Services → Models
 Processes sharing the same `.app` bundle path (from `proc_pidpath`) are aggregated:
 
 - Summed `residentMemoryBytes` and `memoryCost`
-- Display name from bundle (e.g. `Google Chrome.app` → `Google Chrome`)
+- Display name from bundle basename (e.g. `Google Chrome.app` → `Google Chrome`) — not `CFBundleDisplayName` or Activity Monitor’s marketing label
+- Process names for members come from executable path basename; **`proc_name` is not used** (kernel log spam on protected PIDs)
 - `ProcessMemoryInfo.id` = bundle path or `pid:<pid>` for standalone processes
 - `processCount > 1` for grouped rows
 - `members: [ProcessMemberInfo]` — per-PID breakdown (name, path, memory, cost), sorted by memory descending
+
+### Process enumeration (do not regress)
+
+- Use **`sysctl(KERN_PROC_ALL)`** in `ProcessMemoryService.allPIDs()`.
+- **Do not switch back to `proc_listallpids`** — it returns a truncated PID list and hides long-lived background apps (Logi Options+, many daemons).
+- Skip PIDs where `proc_pidinfo` fails or `pti_resident_size` is 0.
 
 ### Memory accounting (do not break without explicit request)
 
@@ -77,9 +84,10 @@ Money Leak is **cost-per-app**, not a clone of Activity Monitor’s system memor
 - **Tone:** fun, native macOS, Activity Monitor–inspired — avoid overly technical columns (no PID in the table).
 - **Summary row:** vertical stats column | Top 5 list | donut chart — all one horizontal band.
 - **Settings:** sheet with Done button; opened via gear toolbar or ⌘,. Do **not** add a separate SwiftUI `Settings { }` scene (causes focus/quit issues).
-- **Export:** `NSSavePanel` — user picks save location; do not write silently to tmp and open Finder.
+- **Export:** `NSSavePanel` — user picks save location; do not write silently to tmp and open Finder. Toolbar has CSV (`square.and.arrow.up`) and receipt PNG (`receipt`); receipt uses `TopFiveReceiptRenderer` / `TopFiveReceiptView`.
 - **Refresh:** automatic only; no manual refresh toolbar button.
 - **Process detail:** grouped rows show a clickable process-count badge (list icon + count + chevron). Click opens `ProcessDetailSheetView` — member list, donut chart, memory + % in chart center; name and executable path appear below the chart on hover. No PID column in the main table.
+- **About:** `CommandGroup(replacing: .appInfo)` opens `AboutView` sheet; Settings also has an About section. Taglines live in `AppAboutInfo.taglines`; `AboutTaglineText` picks a random one on each `onAppear`.
 
 ## Swift / concurrency notes
 
@@ -99,8 +107,12 @@ Money Leak is **cost-per-app**, not a clone of Activity Monitor’s system memor
 | `ProcessTableView.swift` | Main process table, process-count badge, detail sheet presentation |
 | `ProcessDetailSheetView.swift` | Grouped-app breakdown: member list + donut chart |
 | `ProcessMemberInfo.swift` | Per-PID member model for grouped rows |
-| `ProcessListView.swift` | Toolbar, export save panel, settings sheet |
-| `MoneyLeakApp.swift` | App scenes, menu bar |
+| `ProcessListView.swift` | Toolbar, CSV/receipt export save panels, settings sheet |
+| `TopFiveReceiptView.swift` | Thermal-receipt layout for PNG export |
+| `TopFiveReceiptRenderer.swift` | `ImageRenderer` → PNG data |
+| `AppAboutInfo.swift` | Version string, credits, tagline pool |
+| `AboutView.swift` / `AboutTaglineText.swift` | About sheet and random tagline |
+| `MoneyLeakApp.swift` | App scenes, menu bar, About command |
 | `ContentView.swift` | Preview only — not the app entry point |
 
 ## Making changes safely
@@ -119,6 +131,8 @@ Money Leak is **cost-per-app**, not a clone of Activity Monitor’s system memor
 - Enable App Sandbox without adding the entitlements needed for `libproc`.
 - Add a second settings window (`Settings { }` scene).
 - Compare `ProcessMemoryInfo` by `pid` alone in `Equatable`.
+- Use `proc_listallpids` for enumeration (truncated list; breaks visibility of background apps).
+- Call `proc_name` for process labels (noisy kernel logs).
 - Remove `ContentView.swift` without updating Xcode workspace state (stale tab references).
 
 ## Testing manually
@@ -129,7 +143,10 @@ Money Leak is **cost-per-app**, not a clone of Activity Monitor’s system memor
 4. Watch memory/cost columns update without manual refresh.
 5. Open Settings, change custom cost per MB, close — values should recalculate.
 6. Export CSV — save panel appears; file writes to chosen path.
-7. ⌘Q should quit with settings sheet open or closed.
+7. Export receipt PNG — save panel appears; image shows top 5.
+8. Open About (app menu or Settings) — version/credits shown; tagline changes each time About appears.
+9. Search `logi` — `logioptionsplus_agent` should appear if Logi Options+ is running.
+10. ⌘Q should quit with settings or About sheet open or closed.
 
 ## Future enhancements (not implemented)
 

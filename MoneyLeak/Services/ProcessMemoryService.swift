@@ -31,15 +31,13 @@ final class ProcessMemoryService: @unchecked Sendable {
             customCostPerMB: customCostPerMB
         )
 
-        var buffer = [pid_t](repeating: 0, count: 8192)
-        let bytesUsed = proc_listallpids(&buffer, Int32(buffer.count * MemoryLayout<pid_t>.size))
-        guard bytesUsed > 0 else { return [] }
+        let pids = allPIDs()
+        guard !pids.isEmpty else { return [] }
 
-        let pidCount = Int(bytesUsed) / MemoryLayout<pid_t>.size
         var rawProcesses: [RawProcess] = []
-        rawProcesses.reserveCapacity(pidCount)
+        rawProcesses.reserveCapacity(pids.count)
 
-        for pid in buffer.prefix(pidCount) where pid > 0 {
+        for pid in pids {
             guard let memoryBytes = residentMemoryBytes(for: pid), memoryBytes > 0 else {
                 continue
             }
@@ -59,6 +57,26 @@ final class ProcessMemoryService: @unchecked Sendable {
 
         return groupProcesses(rawProcesses)
             .sorted { $0.residentMemoryBytes > $1.residentMemoryBytes }
+    }
+
+    nonisolated private func allPIDs() -> [pid_t] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL]
+        var length = 0
+
+        guard sysctl(&mib, 3, nil, &length, nil, 0) != -1, length > 0 else {
+            return []
+        }
+
+        var buffer = [kinfo_proc](repeating: kinfo_proc(), count: length / MemoryLayout<kinfo_proc>.size)
+        guard sysctl(&mib, 3, &buffer, &length, nil, 0) != -1 else {
+            return []
+        }
+
+        let count = length / MemoryLayout<kinfo_proc>.size
+        return buffer.prefix(count).compactMap { info in
+            let pid = info.kp_proc.p_pid
+            return pid > 0 ? pid : nil
+        }
     }
 
     nonisolated private func groupProcesses(_ rawProcesses: [RawProcess]) -> [ProcessMemoryInfo] {
