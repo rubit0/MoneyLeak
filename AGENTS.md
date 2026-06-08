@@ -32,7 +32,7 @@ App → Views → ViewModels → Services → Models
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Models** | `ProcessMemoryInfo`, `MemoryCostSettings`, `RAMOpportunityCostModel` |
+| **Models** | `ProcessMemoryInfo`, `ProcessMemberInfo`, `MemoryCostSettings`, `RAMOpportunityCostModel` |
 | **Services** | `ProcessMemoryService` — process fetch, bundle grouping, icons |
 | **ViewModels** | `ProcessListViewModel` — refresh loop, filtering, sorting, export content, alerts |
 | **Views** | SwiftUI UI; `ProcessTableView` uses native `Table` |
@@ -42,8 +42,8 @@ App → Views → ViewModels → Services → Models
 
 1. `ProcessListViewModel.startRefreshing()` runs a loop: `refresh()` → sleep(`settings.refreshInterval`).
 2. `refresh()` calls `ProcessMemoryService.fetchProcesses(customCostPerMB:)` on a detached task.
-3. Service enumerates PIDs, reads resident memory, groups by `.app` bundle path, applies `RAMOpportunityCostModel`.
-4. ViewModel publishes `processes`; views observe via `@Observable` / `@Bindable`.
+3. Service enumerates PIDs, reads resident memory, groups by `.app` bundle path, populates `ProcessMemoryInfo.members`, applies `RAMOpportunityCostModel`.
+4. ViewModel publishes `processes`; `totalOccupiedBytes` is the sum of row resident memory. Views observe via `@Observable` / `@Bindable`.
 
 ### Pricing rules (do not break without explicit request)
 
@@ -61,6 +61,16 @@ Processes sharing the same `.app` bundle path (from `proc_pidpath`) are aggregat
 - Display name from bundle (e.g. `Google Chrome.app` → `Google Chrome`)
 - `ProcessMemoryInfo.id` = bundle path or `pid:<pid>` for standalone processes
 - `processCount > 1` for grouped rows
+- `members: [ProcessMemberInfo]` — per-PID breakdown (name, path, memory, cost), sorted by memory descending
+
+### Memory accounting (do not break without explicit request)
+
+Money Leak is **cost-per-app**, not a clone of Activity Monitor’s system memory bar.
+
+- **Per row:** `proc_pidinfo` → `pti_resident_size` (resident memory). Do **not** switch to footprint (`phys_footprint` / `proc_pid_rusage`) unless explicitly asked.
+- **RAM In Use:** sum of all row `residentMemoryBytes`. This will be **lower** than Activity Monitor **Memory Used** (wired, compressed, kernel, and unreadable PIDs are excluded).
+- **Unused RAM value:** `totalPhysicalRAM − RAM In Use` — a budgeting leftover for the opportunity-cost model, **not** free or reclaimable memory.
+- See README **How memory is counted** for the user-facing explanation.
 
 ## UI conventions
 
@@ -69,12 +79,13 @@ Processes sharing the same `.app` bundle path (from `proc_pidpath`) are aggregat
 - **Settings:** sheet with Done button; opened via gear toolbar or ⌘,. Do **not** add a separate SwiftUI `Settings { }` scene (causes focus/quit issues).
 - **Export:** `NSSavePanel` — user picks save location; do not write silently to tmp and open Finder.
 - **Refresh:** automatic only; no manual refresh toolbar button.
+- **Process detail:** grouped rows show a clickable process-count badge (list icon + count + chevron). Click opens `ProcessDetailSheetView` — member list, donut chart, memory + % in chart center; name and executable path appear below the chart on hover. No PID column in the main table.
 
 ## Swift / concurrency notes
 
 - Project uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
 - `ProcessMemoryService` methods are `nonisolated`; class is `@unchecked Sendable` with a lock-backed icon cache.
-- `ProcessMemoryInfo` equality must include **memory and cost fields**, not just `pid`, or the `Table` will not update live.
+- `ProcessMemoryInfo` equality must include **memory, cost, and `members` fields**, not just `pid`, or the `Table` will not update live.
 
 ## Key files
 
@@ -85,7 +96,9 @@ Processes sharing the same `.app` bundle path (from `proc_pidpath`) are aggregat
 | `MemoryCostSettings.swift` | UserDefaults preferences |
 | `ProcessListViewModel.swift` | Refresh loop, alerts, CSV content |
 | `MemoryCostSummaryView.swift` | Summary + top 5 + chart layout |
-| `ProcessTableView.swift` | Main process table columns |
+| `ProcessTableView.swift` | Main process table, process-count badge, detail sheet presentation |
+| `ProcessDetailSheetView.swift` | Grouped-app breakdown: member list + donut chart |
+| `ProcessMemberInfo.swift` | Per-PID member model for grouped rows |
 | `ProcessListView.swift` | Toolbar, export save panel, settings sheet |
 | `MoneyLeakApp.swift` | App scenes, menu bar |
 | `ContentView.swift` | Preview only — not the app entry point |
@@ -111,16 +124,18 @@ Processes sharing the same `.app` bundle path (from `proc_pidpath`) are aggregat
 ## Testing manually
 
 1. Launch app — process table should populate within ~1 s.
-2. Confirm grouped apps (Chrome, Cursor) appear as one row with combined memory.
-3. Watch memory/cost columns update without manual refresh.
-4. Open Settings, change custom cost per MB, close — values should recalculate.
-5. Export CSV — save panel appears; file writes to chosen path.
-6. ⌘Q should quit with settings sheet open or closed.
+2. Confirm grouped apps (Chrome, Cursor, Xcode) appear as one row with combined memory and a process-count badge.
+3. Click the badge on a grouped row — detail sheet lists members, chart hover links to rows, path shows below chart.
+4. Watch memory/cost columns update without manual refresh.
+5. Open Settings, change custom cost per MB, close — values should recalculate.
+6. Export CSV — save panel appears; file writes to chosen path.
+7. ⌘Q should quit with settings sheet open or closed.
 
 ## Future enhancements (not implemented)
 
 - Memory pressure / money pressure graph (removed by design)
 - Memory pressure multipliers, foreground/background weighting
-- Per-process detail drill-down
+- System-level memory categories (wired, compressed, cache) in summary totals
+- Footprint-based per-process memory to align with Activity Monitor
 
 Only implement these if explicitly requested.
