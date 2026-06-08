@@ -8,6 +8,7 @@ struct ProcessMemoryInfo: Identifiable, Equatable {
     let icon: NSImage?
     let residentMemoryBytes: UInt64
     let memoryCost: Double
+    let members: [ProcessMemberInfo]
 
     var isGrouped: Bool { processCount > 1 }
 
@@ -45,5 +46,6 @@ struct ProcessMemoryInfo: Identifiable, Equatable {
             && lhs.processCount == rhs.processCount
             && lhs.residentMemoryBytes == rhs.residentMemoryBytes
             && lhs.memoryCost == rhs.memoryCost
+            && lhs.members == rhs.members
     }
 }

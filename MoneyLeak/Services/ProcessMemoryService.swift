@@ -10,6 +10,7 @@ final class ProcessMemoryService: @unchecked Sendable {
     private struct RawProcess {
         let pid: Int32
         let name: String
+        let executablePath: String?
         let bundlePath: String?
         let memoryBytes: UInt64
         let cost: Double
@@ -48,6 +49,7 @@ final class ProcessMemoryService: @unchecked Sendable {
                 RawProcess(
                     pid: pid,
                     name: processName(for: pid, path: path),
+                    executablePath: path,
                     bundlePath: bundlePath(from: path),
                     memoryBytes: memoryBytes,
                     cost: costModel.memoryCost(for: memoryBytes)
@@ -99,6 +101,18 @@ final class ProcessMemoryService: @unchecked Sendable {
             icon = processIcon(for: representative.pid)
         }
 
+        let memberInfos = members
+            .map { member in
+                ProcessMemberInfo(
+                    pid: member.pid,
+                    name: member.name,
+                    executablePath: member.executablePath,
+                    residentMemoryBytes: member.memoryBytes,
+                    memoryCost: member.cost
+                )
+            }
+            .sorted { $0.residentMemoryBytes > $1.residentMemoryBytes }
+
         return ProcessMemoryInfo(
             id: id,
             pid: representative.pid,
@@ -106,7 +120,8 @@ final class ProcessMemoryService: @unchecked Sendable {
             processName: displayName,
             icon: icon,
             residentMemoryBytes: totalMemory,
-            memoryCost: totalCost
+            memoryCost: totalCost,
+            members: memberInfos
         )
     }
 
