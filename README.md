@@ -2,7 +2,7 @@
 
 A native macOS app that shows running processes and their memory usage as **dollar values** — Activity Monitor meets personal finance.
 
-The display name is **Money Leak Monitor**. The Xcode target and repository folder are named `MoneyLeak`.
+![Money Leak Monitor main window](docs/screenshot_main.png)
 
 ## What it does
 
@@ -13,6 +13,11 @@ Money Leak Monitor helps you see RAM as a shared economic budget:
 - Highlights the top five most expensive apps with a linked list and donut chart
 - Refreshes automatically every second (configurable)
 - Lives in the menu bar with a quick RAM-cost summary
+
+**Receipt export** — save a thermal-receipt PNG of your five most expensive apps from the toolbar.
+
+<img src="docs/receipt.png" alt="Sample top-five receipt" width="280">
+
 
 ## Requirements
 
@@ -130,4 +135,4 @@ Process enumeration uses public macOS APIs only:
 
 ## License
 
-Not specified.
+MIT License
