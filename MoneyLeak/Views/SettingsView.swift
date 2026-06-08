@@ -65,6 +65,14 @@ struct SettingsView: View {
                         Slider(value: $settings.costAlertThreshold, in: 1...50, step: 0.5)
                     }
                 }
+
+                Section("About") {
+                    AboutTaglineText()
+
+                    LabeledContent("Version", value: AppAboutInfo.versionString)
+                    LabeledContent("Created by", value: AppAboutInfo.creatorName)
+                    Link(AppAboutInfo.socialHandle, destination: AppAboutInfo.socialURL)
+                }
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")
@@ -77,6 +85,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 440, height: 420)
+        .frame(width: 440, height: 460)
     }
 }

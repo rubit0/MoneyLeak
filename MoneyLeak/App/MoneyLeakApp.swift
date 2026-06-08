@@ -6,6 +6,7 @@ struct MoneyLeakApp: App {
     @State private var settings = MemoryCostSettings()
     @State private var viewModel: ProcessListViewModel?
     @State private var showSettings = false
+    @State private var showAbout = false
 
     var body: some Scene {
         WindowGroup {
@@ -19,6 +20,9 @@ struct MoneyLeakApp: App {
                         .frame(width: 300, height: 200)
                 }
             }
+            .sheet(isPresented: $showAbout) {
+                AboutView()
+            }
             .onAppear {
                 if viewModel == nil {
                     let model = ProcessListViewModel(settings: settings)
@@ -29,6 +33,12 @@ struct MoneyLeakApp: App {
         }
         .defaultSize(width: 960, height: 640)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Money Leak Monitor") {
+                    showAbout = true
+                }
+            }
+
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
                     showSettings = true
