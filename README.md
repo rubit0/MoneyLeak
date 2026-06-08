@@ -100,7 +100,7 @@ MoneyLeak/
 
 Process enumeration uses public macOS APIs only:
 
-- `proc_listallpids`, `proc_pidinfo`, `proc_name`, `proc_pidpath`
+- `proc_listallpids`, `proc_pidinfo`, `proc_pidpath` (process names from executable path basename)
 - `sysctl` (`HW_MEMSIZE`) for total RAM
 - `host_statistics64` is not used in the current version
 

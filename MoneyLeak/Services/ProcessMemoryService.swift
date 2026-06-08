@@ -169,18 +169,13 @@ final class ProcessMemoryService: @unchecked Sendable {
     }
 
     nonisolated private func processName(for pid: pid_t, path: String?) -> String {
-        var nameBuffer = [CChar](repeating: 0, count: 256)
-        let result = proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
-        if result == 0 {
-            let name = String(cString: nameBuffer)
+        if let path {
+            let name = (path as NSString).lastPathComponent
             if !name.isEmpty { return name }
         }
 
-        if let path {
-            return (path as NSString).lastPathComponent
-        }
-
-        return "PID \(pid)"
+        // proc_name is intentionally not used — it logs "task name port right" errors for protected PIDs.
+        return "Unknown Process"
     }
 
     nonisolated private func iconForBundle(_ bundlePath: String) -> NSImage? {

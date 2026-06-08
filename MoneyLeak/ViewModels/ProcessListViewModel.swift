@@ -103,6 +103,47 @@ final class ProcessListViewModel {
         return "Money Leak Monitor \(formatter.string(from: Date())).csv"
     }
 
+    var suggestedReceiptFilename: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        return "Money Leak Receipt \(formatter.string(from: Date())).png"
+    }
+
+    func makeReceiptData() -> TopFiveReceiptData {
+        let topFive = topFiveByCost
+        return TopFiveReceiptData(
+            processes: topFive,
+            topFiveTotalCost: topFive.reduce(0) { $0 + $1.memoryCost },
+            systemRAMValue: systemRAMValue,
+            totalPhysicalRAMGB: Double(totalPhysicalRAMBytes) / 1_073_741_824.0,
+            generatedAt: Date()
+        )
+    }
+
+    func makeReceiptImage() -> NSImage? {
+        guard !topFiveByCost.isEmpty else { return nil }
+        return TopFiveReceiptRenderer.render(data: makeReceiptData())
+    }
+
+    func writeReceipt(to url: URL) throws {
+        guard let image = makeReceiptImage(),
+              let pngData = TopFiveReceiptRenderer.pngData(from: image) else {
+            throw ReceiptExportError.renderFailed
+        }
+        try pngData.write(to: url, options: .atomic)
+    }
+
+    enum ReceiptExportError: LocalizedError {
+        case renderFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .renderFailed:
+                "Could not generate the receipt image."
+            }
+        }
+    }
+
     func csvExportContent() -> String {
         let header = "Process Name,Memory (MB),Cost (USD),% of Total RAM\n"
         let rows = filteredProcesses.map { process in

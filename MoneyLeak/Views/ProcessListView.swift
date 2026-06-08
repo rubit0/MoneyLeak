@@ -29,6 +29,14 @@ struct ProcessListView: View {
                 .help("Export CSV")
 
                 Button {
+                    exportReceipt()
+                } label: {
+                    Image(systemName: "receipt")
+                }
+                .disabled(viewModel.topFiveByCost.isEmpty)
+                .help("Save thermal receipt image")
+
+                Button {
                     showSettings = true
                 } label: {
                     Image(systemName: "gearshape")
@@ -55,6 +63,28 @@ struct ProcessListView: View {
         }
         .onDisappear {
             viewModel.stopRefreshing()
+        }
+    }
+
+    private func exportReceipt() {
+        let panel = NSSavePanel()
+        panel.title = "Save RAM Expense Receipt"
+        panel.prompt = "Save"
+        panel.nameFieldStringValue = viewModel.suggestedReceiptFilename
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        Task { @MainActor in
+            let response = await panel.begin()
+            guard response == .OK, let url = panel.url else { return }
+
+            do {
+                try viewModel.writeReceipt(to: url)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+                showExportError = true
+            }
         }
     }
 
